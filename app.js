@@ -1,25 +1,67 @@
 // app.js
 require('dotenv').config();
 const { App } = require('@slack/bolt');
-const { Langbase } = require('langbase');
+const https = require('https');
 
-// Initialize Langbase client
-const langbase = new Langbase();
+// Function to make HTTP requests to Langbase API
+function callLangbaseAPI(question) {
+  return new Promise((resolve, reject) => {
+    const postData = JSON.stringify({
+      messages: [
+        {
+          role: 'user',
+          content: question
+        }
+      ]
+    });
 
-// Initialize Slack app with environment variables
+    const options = {
+      hostname: 'api.langbase.com',
+      path: '/v1/pipe/run', // Update with actual Langbase endpoint
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.LANGBASE_API_KEY}`,
+        'Content-Type': 'application/json',
+        'Content-Length': postData.length
+      }
+    };
+
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', (chunk) => {
+        data += chunk;
+      });
+      res.on('end', () => {
+        try {
+          resolve(JSON.parse(data));
+        } catch (e) {
+          reject(new Error(`Failed to parse response: ${e.message}`));
+        }
+      });
+    });
+
+    req.on('error', (error) => {
+      reject(new Error(`Request failed: ${error.message}`));
+    });
+
+    req.write(postData);
+    req.end();
+  });
+}
+
+// Initialize Slack app
 const app = new App({
   token: process.env.SLACK_BOT_TOKEN,
   signingSecret: process.env.SLACK_SIGNING_SECRET,
-  socketMode: false, // We'll use HTTP endpoints for Events API
+  socketMode: false,
 });
 
 // Listen for app_mention events
-app.event('app_mention', async ({ event, context, say }) => {
+app.event('app_mention', async ({ event, say }) => {
   try {
     console.log('Received app_mention event:', event);
     
-    // Extract the question from the message
-    // Remove the app mention part (everything before the >)
+    // Extract the question
     const messageText = event.text;
     const question = messageText.split('>').slice(1).join('>').trim();
     
@@ -33,13 +75,25 @@ app.event('app_mention', async ({ event, context, say }) => {
     
     console.log(`Processing question: ${question}`);
     
-    // Call Langbase API with the extracted question
-    const response = await processQuestionWithLangbase(question);
+    // Call Langbase API
+    const langbaseResponse = await callLangbaseAPI(question);
+    console.log('Langbase response:', langbaseResponse);
     
-    // Send the response back to Slack
+    // Extract response content
+    let responseText = "I couldn't generate a proper response. Please try again.";
+    
+    if (langbaseResponse && 
+        langbaseResponse.choices && 
+        langbaseResponse.choices[0] && 
+        langbaseResponse.choices[0].message && 
+        langbaseResponse.choices[0].message.content) {
+      responseText = langbaseResponse.choices[0].message.content;
+    }
+    
+    // Send response to Slack
     await say({
-      text: response,
-      thread_ts: event.ts // Reply in thread
+      text: responseText,
+      thread_ts: event.ts
     });
     
   } catch (error) {
@@ -50,37 +104,6 @@ app.event('app_mention', async ({ event, context, say }) => {
     });
   }
 });
-
-/**
- * Process the question using Langbase RAG
- * @param {string} question - The question extracted from Slack message
- * @returns {Promise<string>} - The response from Langbase
- */
-async function processQuestionWithLangbase(question) {
-  try {
-    // Call Langbase API with the question
-    const langbaseResponse = await langbase.pipe.run({
-      apiKey: process.env.LANGBASE_API_KEY,
-      messages: [
-        {
-          role: 'user',
-          content: question
-        },
-      ],
-    });
-    
-    console.log('Langbase response:', langbaseResponse);
-    
-    // Extract and return the answer text from the response
-    // Note: Adjust this based on the actual structure of Langbase response
-    return langbaseResponse.choices?.[0]?.message?.content || 
-           "I couldn't generate a proper response. Please try again.";
-    
-  } catch (error) {
-    console.error(`Error calling Langbase API: ${error}`);
-    throw error;
-  }
-}
 
 // Start the app
 (async () => {

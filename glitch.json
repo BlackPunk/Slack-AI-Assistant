@@ -1,0 +1,14 @@
+{
+    "install": "npm install",
+    "start": "node app.js",
+    "watch": {
+      "ignore": ["\\.git", "node_modules/**/node_modules"],
+      "install": {
+        "include": ["^package\\.json$"]
+      },
+      "restart": {
+        "include": ["^app\\.js$", "^\\.env$"]
+      }
+    }
+  }
+  
