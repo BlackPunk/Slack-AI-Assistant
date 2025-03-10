@@ -1,0 +1,15 @@
+{
+    "name": "slack-langbase-rag-bot",
+    "version": "1.0.0",
+    "description": "A Slack app that uses Langbase RAG for answering questions",
+    "main": "app.js",
+    "scripts": {
+      "start": "node app.js"
+    },
+    "dependencies": {
+      "@slack/bolt": "^3.12.0",
+      "dotenv": "^16.0.3",
+      "express": "^4.18.2",
+      "langbase": "^1.0.0"
+    }
+  }
